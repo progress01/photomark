@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>報告專用浮水印工具 V10 (旗艦版)</title>
+    <style>
+        :root { 
+            --primary: #1a73e8;       /* Google Blue */
+            --accent: #34a853;        /* Success Green */
+            --bg: #ffffff; 
+            --sidebar-bg: #f8f9fa;
+            --text-main: #202124;
+            --text-sub: #5f6368;
+            --border: #dadce0;
+            --sidebar-w: 320px;
+        }
+        body { font-family: "Microsoft JhengHei", "Segoe UI", sans-serif; background: var(--bg); color: var(--text-main); margin: 0; display: flex; height: 100vh; overflow: hidden; }
+        
+        /* === UI 元件 (按鈕/輸入框) === */
+        .btn { padding: 10px 16px; border-radius: 8px; border: 1px solid var(--border); background: white; color: var(--text-main); cursor: pointer; font-weight: bold; font-size: 0.95rem; transition: 0.2s; display: flex; align-items: center; justify-content: center; gap: 5px; }
+        .btn:hover { background: #f1f3f4; border-color: var(--primary); color: var(--primary); }
+        .btn.active { background: #e8f0fe; color: var(--primary); border-color: var(--primary); }
+        
+        .btn-primary { background: var(--primary); color: white; border: none; font-size: 1.1rem; padding: 14px; width: 100%; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .btn-primary:hover { background: #1557b0; color: white; box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
+        
+        .btn-reset { color: #d93025; border-color: #fce8e6; margin-bottom: 10px; font-size: 0.9em; width: 100%; }
+        .btn-reset:hover { background: #fce8e6; border-color: #d93025; }
+
+        .btn-group { display: flex; gap: 8px; width: 100%; }
+        .btn-group .btn { flex: 1; }
+
+        input[type="text"] { width: 100%; padding: 10px; border: 2px solid var(--border); border-radius: 8px; font-size: 1.1em; text-align: center; box-sizing: border-box; transition: 0.2s; }
+        input[type="text"]:focus { border-color: var(--primary); outline: none; }
+
+        /* === 左側欄結構 === */
+        .sidebar { width: var(--sidebar-w); background: var(--sidebar-bg); border-right: 1px solid var(--border); display: flex; flex-direction: column; z-index: 20; }
+        
+        /* 設定區 (上) */
+        .settings-pane { padding: 20px; overflow-y: auto; flex: 0 0 auto; max-height: 60vh; display: flex; flex-direction: column; gap: 20px; border-bottom: 1px solid var(--border); }
+        .control-label { font-size: 1em; font-weight: bold; color: var(--text-main); margin-bottom: 8px; display: block; }
+        
+        /* 位置九宮格 */
+        .pos-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; width: 140px; margin: 0 auto; }
+        .pos-btn { aspect-ratio: 1; border: 2px solid var(--border); border-radius: 6px; cursor: pointer; background: white; transition: 0.2s;}
+        .pos-btn.active { background: var(--primary); border-color: var(--primary); box-shadow: inset 0 0 0 3px white; }
+
+        /* 紀錄區 (下) */
+        .history-pane { flex: 1; display: flex; flex-direction: column; background: white; overflow: hidden; }
+        .history-header { padding: 12px 20px; background: #f8f9fa; border-bottom: 1px solid var(--border); font-weight: bold; color: var(--text-sub); display: flex; justify-content: space-between; align-items: center; font-size: 0.9em; }
+        .history-list { flex: 1; overflow-y: auto; padding: 0; margin: 0; list-style: none; }
+        .history-item { padding: 10px 20px; border-bottom: 1px solid #f1f3f4; font-size: 0.9em; color: var(--text-main); cursor: pointer; display: flex; align-items: center; gap: 8px; transition: 0.2s; }
+        .history-item:hover { background: #e8f0fe; }
+        .history-item.clicked { background: #e8f0fe; font-weight: bold; }
+        .history-time { margin-left: auto; color: #999; font-size: 0.8em; }
+
+        /* === 右側主區域 === */
+        .main-area { flex: 1; display: flex; flex-direction: column; position: relative; background: white; }
+
+        /* 頂部導航列 */
+        .top-bar-wrapper { background: white; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; }
+        
+        /* 第一排：搜尋 */
+        .search-row { height: 70px; display: flex; align-items: center; padding: 0 30px; gap: 20px; }
+        .search-box-group { flex: 1; display: flex; align-items: center; gap: 10px; position: relative; }
+        .search-input { width: 100%; max-width: 500px; background: #f1f3f4; border: none; padding: 12px 24px; border-radius: 30px; font-size: 1.1rem; outline: none; transition: 0.3s; }
+        .search-input:focus { background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        
+        /* 篩選按鈕 */
+        .filter-btn { padding: 8px 16px; border-radius: 20px; border: 1px solid var(--border); color: var(--text-sub); cursor: pointer; font-weight: bold; font-size: 0.9em; background: white; display: flex; gap: 5px; align-items: center;}
+        .filter-btn:hover { background: #f1f3f4; }
+        .filter-btn.active { background: #e6f4ea; color: var(--accent); border-color: var(--accent); }
+
+        /* 第二排：智慧標籤 */
+        .tags-row { padding: 0 30px 15px 30px; display: flex; gap: 8px; flex-wrap: wrap; min-height: 40px; }
+        .tag-chip { font-size: 0.85em; background: #f1f3f4; color: var(--text-sub); padding: 5px 12px; border-radius: 16px; cursor: pointer; border: 1px solid transparent; transition: 0.2s; user-select: none; }
+        .tag-chip:hover { background: #e8f0fe; color: var(--primary); }
+        .tag-chip.active { background: var(--primary); color: white; border-color: var(--primary); }
+        .tag-count { font-size: 0.8em; opacity: 0.7; margin-left: 4px; }
+
+        /* 照片牆 (Gallery) */
+        .gallery-container { flex: 1; overflow-y: auto; padding: 20px 30px; scroll-behavior: smooth; }
+        .gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; padding-bottom: 80px; }
+        
+        .photo-item { position: relative; aspect-ratio: 1; background: #f8f9fa; cursor: pointer; overflow: hidden; border-radius: 4px; }
+        .photo-item canvas { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.3s; }
+        .photo-item:hover canvas { transform: scale(1.05); }
+        
+        /* 已使用標記 (Used Badge) */
+        .photo-item.used::before {
+            content: "✅ 已貼上"; position: absolute; top: 8px; right: 8px; z-index: 5;
+            background: rgba(255, 255, 255, 0.95); color: var(--accent); font-weight: bold; 
+            padding: 4px 10px; border-radius: 12px; font-size: 0.8em; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2); border: 1px solid var(--accent);
+        }
+        .photo-item.used canvas { opacity: 0.6; filter: grayscale(30%); }
+        .photo-item.highlight { box-shadow: 0 0 0 4px var(--accent); z-index: 10; transform: scale(1.02); transition: 0.2s; border-radius: 4px;}
+
+        /* 燈箱 (Lightbox) */
+        .lightbox { position: fixed; inset: 0; background: rgba(0,0,0,0.96); z-index: 2000; display: none; flex-direction: column; }
+        .lightbox.active { display: flex; }
+        .lb-header { padding: 20px; display: flex; justify-content: space-between; color: #e8eaed; font-size: 1.2em; }
+        .lb-main { flex: 1; display: flex; justify-content: center; align-items: center; position: relative; }
+        .lb-main canvas { max-width: 90%; max-height: 80vh; box-shadow: 0 0 30px rgba(0,0,0,0.5); }
+        .lb-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 70px; height: 70px; border-radius: 50%; background: rgba(255,255,255,0.1); color: white; border: none; font-size: 30px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s; }
+        .lb-nav:hover { background: rgba(255,255,255,0.3); transform: scale(1.1); }
+        .lb-prev { left: 30px; } .lb-next { right: 30px; }
+        
+        .lb-footer { height: 100px; display: flex; justify-content: center; align-items: center; gap: 20px; }
+        .btn-copy-big { background: var(--accent); color: white; border: none; padding: 15px 50px; font-size: 1.4rem; border-radius: 40px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 15px rgba(0,0,0,0.3); transition: 0.2s; display: flex; align-items: center; gap: 10px;}
+        .btn-copy-big:hover { transform: scale(1.05); background: #2d9147; }
+
+        /* 沒資料 / 提示 */
+        #emptyState { margin-top: 100px; text-align: center; color: var(--text-sub); }
+        .upload-icon { font-size: 60px; color: #dadce0; margin-bottom: 20px; }
+        .toast { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.9); color: white; padding: 25px 40px; border-radius: 12px; font-size: 1.6em; opacity: 0; pointer-events: none; transition: 0.3s; z-index: 3000; display:flex; gap:10px; align-items:center;}
+        .toast.show { opacity: 1; }
+    </style>
+</head>
+<body>
+
+<div class="sidebar">
+    <div class="settings-pane">
+        <button class="btn btn-reset" onclick="resetSettings()">↺ 恢復預設值</button>
+
+        <div>
+            <label class="control-label">1. 全域日期</label>
+            <div style="display:flex; gap:8px;">
+                <input type="text" id="globalDate" placeholder="YYYY/MM/DD">
+                <button class="btn" onclick="setToToday()">今天</button>
+            </div>
+        </div>
+
+        <div>
+            <label class="control-label">2. 字體大小</label>
+            <div class="btn-group" id="sizeGroup">
+                <button class="btn" onclick="setSize(0.8)">小</button>
+                <button class="btn active" onclick="setSize(1.2)">中</button>
+                <button class="btn" onclick="setSize(1.8)">大</button>
+            </div>
+        </div>
+
+        <div>
+            <label class="control-label">3. 浮水印位置</label>
+            <div class="pos-grid" id="posGrid"></div>
+        </div>
+
+        <div>
+            <label class="control-label">4. 樣式</label>
+            <button class="btn" id="styleBtn" onclick="toggleStyle()" style="width:100%">🌗 切換 黑底/白邊</button>
+        </div>
+        
+        <label class="btn btn-primary">
+            <input type="file" id="fileInput" multiple accept="image/*" style="display:none">
+            📂 匯入照片
+        </label>
+    </div>
+
+    <div class="history-pane">
+        <div class="history-header">
+            <span>📝 作業紀錄 (<span id="historyCount">0</span>)</span>
+            <button class="btn" style="padding:4px 8px; font-size:0.8em; border:none; color:var(--primary);" onclick="copyHistoryList()">複製清單</button>
+        </div>
+        <ul class="history-list" id="historyList">
+            <li style="padding:20px; text-align:center; color:#999; font-size:0.9em;">尚未複製照片</li>
+        </ul>
+    </div>
+</div>
+
+<div class="main-area">
+    <div class="top-bar-wrapper">
+        <div class="search-row">
+            <div class="search-box-group">
+                <input type="text" id="searchInput" class="search-input" placeholder="🔍 搜尋檔名 (或點擊下方標籤)">
+                <button class="filter-btn" id="filterUsedBtn" onclick="toggleFilterUsed()">
+                    <span>✅ 只看已記錄</span>
+                </button>
+            </div>
+            <div style="color:var(--text-sub); font-weight:bold;">共 <span id="totalCount">0</span> 張</div>
+        </div>
+        <div class="tags-row" id="tagCloud" style="display:none;"></div>
+    </div>
+
+    <div class="gallery-container">
+        <div id="emptyState">
+            <div class="upload-icon">📷</div>
+            <h2>尚未匯入照片</h2>
+            <p>請將整理好的照片資料夾拖曳至此</p>
+        </div>
+        <div class="gallery-grid" id="grid"></div>
+    </div>
+</div>
+
+<div class="lightbox" id="lightbox">
+    <div class="lb-header">
+        <span id="lbFilename">Filename.jpg</span>
+        <span style="cursor:pointer" onclick="closeLightbox()">✕ 關閉 (Esc)</span>
+    </div>
+    <div class="lb-main">
+        <button class="lb-nav lb-prev" onclick="nav(-1)">❮</button>
+        <canvas id="lbCanvas"></canvas>
+        <button class="lb-nav lb-next" onclick="nav(1)">❯</button>
+    </div>
+    <div class="lb-footer">
+        <button class="btn-copy-big" onclick="copyFromLightbox()">
+            <span>📋</span> 複製到剪貼簿 (Enter)
+        </button>
+    </div>
+</div>
+
+<div class="toast" id="toast">✅ 已複製！</div>
+
+<script>
+    // --- 1. 核心狀態與資料 ---
+    const defaultState = { date: "", size: 1.2, pos: 8, isDark: true };
+    const state = {...defaultState};
+    
+    // photos 陣列存儲所有圖片資訊
+    let photos = []; // { id, img, name, used, tags }
+    let focusIndex = -1; // 目前燈箱檢視的索引
+    let isFilterUsed = false; // 是否開啟「只看已記錄」
+    let currentTag = ""; // 目前選中的智慧標籤
+
+    // --- 2. 初始化 ---
+    function init() {
+        setToToday();
+        renderPosGrid();
+        
+        // 綁定檔案輸入
+        document.getElementById('fileInput').addEventListener('change', e => handleFiles(e.target.files));
+        // 綁定拖曳上傳
+        document.body.addEventListener('dragover', e => e.preventDefault());
+        document.body.addEventListener('drop', e => { e.preventDefault(); handleFiles(e.dataTransfer.files); });
+        
+        // 綁定全域設定監聽
+        document.getElementById('globalDate').addEventListener('input', e => { state.date = e.target.value; renderAll(); });
+        document.getElementById('searchInput').addEventListener('input', applyFilters);
+    }
+    init();
+
+    // --- 3. 檔案處理 (含 V10 智慧標籤生成) ---
+    function handleFiles(files) {
+        if(files.length > 0) document.getElementById('emptyState').style.display = 'none';
+        
+        let loadedCount = 0;
+        const totalToLoad = Array.from(files).filter(f => f.type.startsWith('image/')).length;
+        if(totalToLoad === 0) return;
+
+        Array.from(files).forEach(file => {
+            if(!file.type.startsWith('image/')) return;
+            const reader = new FileReader();
+            reader.onload = e => {
+                const img = new Image();
+                img.onload = () => {
+                    photos.push({ 
+                        id: Date.now() + Math.random(), 
+                        img: img, 
+                        name: file.name, 
+                        used: false 
+                    });
+                    
+                    // 新增一張照片到 Grid
+                    renderGridItem(photos[photos.length-1], photos.length-1);
+                    document.getElementById('totalCount').innerText = photos.length;
+                    
+                    loadedCount++;
+                    // 全部讀取完畢後，重新計算標籤
+                    if(loadedCount === totalToLoad) {
+                        generateTags();
+                    }
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // --- V10 智慧標籤邏輯 ---
+    function generateTags() {
+        const tagMap = {};
+        photos.forEach(p => {
+            const rawName = p.name.replace(/\.[^/.]+$/, ""); // 去副檔名
+            const parts = rawName.split(/[_\-\s]+/); // 切割符號
+            parts.forEach(part => {
+                // 過濾純數字或太短的詞
+                if(part.length > 1 && isNaN(part)) { 
+                    tagMap[part] = (tagMap[part] || 0) + 1;
+                }
+            });
+        });
+        
+        // 排序：次數多在前，且至少出現2次
+        const sortedTags = Object.keys(tagMap)
+            .map(key => ({ text: key, count: tagMap[key] }))
+            .filter(item => item.count > 1)
+            .sort((a, b) => b.count - a.count);
+
+        renderTags(sortedTags);
+    }
+
+    function renderTags(tags) {
+        const container = document.getElementById('tagCloud');
+        container.innerHTML = '';
+        if(tags.length > 0) container.style.display = 'flex';
+        
+        tags.forEach(tag => {
+            const chip = document.createElement('div');
+            chip.className = 'tag-chip';
+            chip.innerHTML = `${tag.text}<span class="tag-count">${tag.count}</span>`;
+            chip.onclick = () => toggleTag(tag.text, chip);
+            container.appendChild(chip);
+        });
+    }
+
+    function toggleTag(text, chipEl) {
+        const searchInput = document.getElementById('searchInput');
+        if(currentTag === text) {
+            currentTag = "";
+            searchInput.value = "";
+            chipEl.classList.remove('active');
+        } else {
+            document.querySelectorAll('.tag-chip').forEach(c => c.classList.remove('active'));
+            currentTag = text;
+            searchInput.value = text;
+            chipEl.classList.add('active');
+        }
+        applyFilters();
+    }
+
+    // --- 4. 渲染與繪圖 ---
+    function renderGridItem(photo, index) {
+        const div = document.createElement('div');
+        div.className = 'photo-item';
+        div.id = `photo-${photo.id}`;
+        if(photo.used) div.classList.add('used');
+        div.dataset.name = photo.name; // 用於搜尋
+        div.onclick = () => openLightbox(index);
+
+        const canvas = document.createElement('canvas');
+        div.appendChild(canvas);
+
+        // 綁定重畫函數
+        div.redraw = () => {
+            drawToCanvas(canvas, photo.img, state.date, state.size, state.pos, state.isDark);
+        };
+        div.redraw();
+        document.getElementById('grid').appendChild(div);
+    }
+
+    function drawToCanvas(canvas, img, text, sizeScale, posIndex, isDark) {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+
+        if(!text) return;
+
+        const baseSize = Math.max(canvas.width, canvas.height) * 0.035;
+        const fontSize = Math.floor(baseSize * sizeScale);
+        ctx.font = `bold ${fontSize}px Arial`;
+        const metrics = ctx.measureText(text);
+        
+        const padding = fontSize;
+        let x, y;
+        const row = Math.floor(posIndex / 3);
+        const col = posIndex % 3;
+
+        // X軸
+        if (col === 0) x = padding;
+        else if (col === 1) x = (canvas.width - metrics.width)/2;
+        else x = canvas.width - metrics.width - padding;
+
+        // Y軸
+        const textH = fontSize;
+        if (row === 0) y = padding + textH;
+        else if (row === 1) y = (canvas.height + textH)/2;
+        else y = canvas.height - padding;
+
+        // 背景與文字
+        if(isDark) {
+            ctx.fillStyle = "rgba(0,0,0,0.6)";
+            // 微調背景框位置使其置中於文字
+            ctx.fillRect(x - fontSize*0.2, y - fontSize + fontSize*0.2, metrics.width + fontSize*0.4, fontSize*1.2);
+            ctx.fillStyle = "white";
+            ctx.fillText(text, x, y);
+        } else {
+            ctx.strokeStyle = "white";
+            ctx.lineWidth = fontSize * 0.15;
+            ctx.strokeText(text, x, y);
+            ctx.fillStyle = "black";
+            ctx.fillText(text, x, y);
+        }
+    }
+
+    function renderAll() {
+        document.querySelectorAll('.photo-item').forEach(el => el.redraw && el.redraw());
+        if(document.getElementById('lightbox').classList.contains('active')) renderLightbox();
+    }
+
+    // --- 5. 搜尋與過濾 ---
+    function toggleFilterUsed() {
+        isFilterUsed = !isFilterUsed;
+        const btn = document.getElementById('filterUsedBtn');
+        btn.classList.toggle('active', isFilterUsed);
+        applyFilters();
+    }
+
+    function applyFilters() {
+        const term = document.getElementById('searchInput').value.toLowerCase();
+        
+        photos.forEach(photo => {
+            const el = document.getElementById(`photo-${photo.id}`);
+            if(!el) return;
+
+            const matchSearch = photo.name.toLowerCase().includes(term);
+            const matchFilter = isFilterUsed ? photo.used : true;
+
+            if(matchSearch && matchFilter) el.style.display = '';
+            else el.style.display = 'none';
+        });
+    }
+
+    // --- 6. 紀錄與回溯 (V9) ---
+    function addToHistory(index) {
+        const photo = photos[index];
+        if(!photo.used) {
+            photo.used = true;
+            // 更新 Grid UI
+            const el = document.getElementById(`photo-${photo.id}`);
+            if(el) el.classList.add('used');
+        }
+
+        const now = new Date();
+        const timeStr = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+        const list = document.getElementById('historyList');
+        
+        // 移除初始提示
+        if(list.children[0]?.innerText.includes("尚未")) list.innerHTML = '';
+
+        const li = document.createElement('li');
+        li.className = 'history-item';
+        li.innerHTML = `
+            <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:140px;">${photo.name}</span>
+            <span class="history-time">${timeStr}</span>
+        `;
+        li.onclick = () => scrollToPhoto(photo.id);
+        
+        list.insertBefore(li, list.firstChild);
+        document.getElementById('historyCount').innerText = list.children.length;
+    }
+
+    function scrollToPhoto(id) {
+        // 如果被過濾掉，先取消過濾
+        if(isFilterUsed) toggleFilterUsed();
+        
+        const el = document.getElementById(`photo-${id}`);
+        if(el) {
+            el.scrollIntoView({behavior: 'smooth', block: 'center'});
+            el.classList.add('highlight');
+            setTimeout(() => el.classList.remove('highlight'), 1500);
+        }
+    }
+
+    function copyHistoryList() {
+        const usedPhotos = photos.filter(p => p.used);
+        if(usedPhotos.length === 0) { alert('沒有紀錄可複製'); return; }
+        const text = usedPhotos.map(p => p.name).join('\n');
+        navigator.clipboard.writeText(text).then(() => alert('✅ 已複製清單到剪貼簿'));
+    }
+
+    // --- 7. 燈箱與複製 ---
+    function openLightbox(index) {
+        focusIndex = index;
+        document.getElementById('lightbox').classList.add('active');
+        renderLightbox();
+    }
+
+    function closeLightbox() {
+        document.getElementById('lightbox').classList.remove('active');
+    }
+
+    function renderLightbox() {
+        if(focusIndex < 0 || focusIndex >= photos.length) return;
+        const photo = photos[focusIndex];
+        document.getElementById('lbFilename').innerText = photo.name;
+        const canvas = document.getElementById('lbCanvas');
+        drawToCanvas(canvas, photo.img, state.date, state.size, state.pos, state.isDark);
+    }
+
+    function nav(delta) {
+        let next = focusIndex + delta;
+        if(next >= 0 && next < photos.length) {
+            focusIndex = next;
+            renderLightbox();
+        }
+    }
+
+    async function copyFromLightbox() {
+        const canvas = document.getElementById('lbCanvas');
+        try {
+            canvas.toBlob(async blob => {
+                const item = new ClipboardItem({"image/png": blob});
+                await navigator.clipboard.write([item]);
+                
+                // 加入紀錄
+                addToHistory(focusIndex);
+                
+                // 顯示 Toast
+                const t = document.getElementById('toast');
+                t.classList.add('show');
+                setTimeout(() => t.classList.remove('show'), 1500);
+            });
+        } catch(err) {
+            alert("複製失敗：請確認使用 HTTPS 或 localhost 環境");
+        }
+    }
+
+    // --- 8. 輔助功能 (重置/樣式) ---
+    function resetSettings() {
+        if(confirm('確定要恢復預設設定嗎？')) {
+            state.size = 1.2;
+            state.pos = 8;
+            state.isDark = true;
+            setToToday();
+            renderPosGrid();
+            updateSizeBtns();
+            renderAll();
+        }
+    }
+    
+    function setToToday() {
+        const now = new Date();
+        state.date = `${now.getFullYear()}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getDate().toString().padStart(2,'0')}`;
+        document.getElementById('globalDate').value = state.date;
+        renderAll();
+    }
+
+    function setSize(val) {
+        state.size = val;
+        updateSizeBtns();
+        renderAll();
+    }
+
+    function updateSizeBtns() {
+        const btns = document.getElementById('sizeGroup').children;
+        btns[0].className = `btn ${state.size===0.8?'active':''}`;
+        btns[1].className = `btn ${state.size===1.2?'active':''}`;
+        btns[2].className = `btn ${state.size===1.8?'active':''}`;
+    }
+
+    function renderPosGrid() {
+        const grid = document.getElementById('posGrid');
+        grid.innerHTML = '';
+        for(let i=0; i<9; i++) {
+            let btn = document.createElement('div');
+            btn.className = `pos-btn ${i===state.pos?'active':''}`;
+            btn.onclick = () => { state.pos = i; renderPosGrid(); renderAll(); };
+            grid.appendChild(btn);
+        }
+    }
+    
+    function toggleStyle() {
+        state.isDark = !state.isDark;
+        renderAll();
+    }
+
+    // 鍵盤支援
+    document.addEventListener('keydown', (e) => {
+        if(document.getElementById('lightbox').classList.contains('active')) {
+            if(e.key === 'ArrowLeft') nav(-1);
+            if(e.key === 'ArrowRight') nav(1);
+            if(e.key === 'Escape') closeLightbox();
+            if(e.key === 'Enter') copyFromLightbox();
+        } else {
+            // 在主畫面按 / 跳到搜尋
+            if(e.key === '/') {
+                e.preventDefault();
+                document.getElementById('searchInput').focus();
+            }
+        }
+    });
+
+</script>
+</body>
+</html>
